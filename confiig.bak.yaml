@@ -338,8 +338,8 @@ ollama:
   # base_url: "http://192.168.18.55:11434/v1" # Ollama 本地 API 地址，默认就是这个
   # api_key: "ollama" # Ollama 不验证 token，只要是非空即可
   # model: "qwen2.5:3b" # 你本地运行的模型名称，确保 `ollama list` 中存在
-  system_prompt: '/home/lzx/.wukong/prompts/system_prompt.txt'
-  sys_nlu: '/home/lzx/.wukong/prompts/sys_nlu.txt'
+  system_prompt: '/home/lzx/wukong-robot/prompts/system_prompt.txt'
+  sys_nlu: '/home/lzx/wukong-robot/prompts/sys_nlu.txt'
 # 邮箱
 # 如果使用网易邮箱，还需设置允许第三方客户端收发邮件
 email:
