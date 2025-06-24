@@ -6,6 +6,8 @@ from . import utils, config
 from robot import logging
 from abc import ABCMeta, abstractmethod
 import requests
+from funasr import AutoModel
+from funasr.utils.postprocess_utils import rich_transcription_postprocess
 
 logger = logging.getLogger(__name__)
 
@@ -243,28 +245,74 @@ class WhisperASR(AbstractASR):
         logger.critical(f"{self.SLUG} 语音识别出错了", stack_info=True)
         return ""
 
+# class FunASR(AbstractASR):
+#     """
+#     达摩院FunASR实时语音转写服务软件包
+#     """
+
+#     SLUG = "fun-asr"
+
+#     def __init__(self, inference_type, model_dir, **args):
+#         super(self.__class__, self).__init__()
+#         self.engine = FunASREngine.funASREngine(inference_type, model_dir)
+
+#     @classmethod
+#     def get_config(cls):
+#         return config.get("fun_asr", {})
+
+#     def transcribe(self, fp):
+#         result = self.engine(fp)
+#         if result:
+#             logger.info(f"{self.SLUG} 语音识别到了：{result}")
+#             return result
+#         else:
+#             logger.critical(f"{self.SLUG} 语音识别出错了", stack_info=True)
+#             return ""
+        
 class FunASR(AbstractASR):
     """
-    达摩院FunASR实时语音转写服务软件包
+    达摩院 FunASR 实时语音转写服务封装类
+    第一次运行会自动下载，根据网络环境决定下载时长
+    后续运行加载大概会在10s左右
     """
 
     SLUG = "fun-asr"
 
-    def __init__(self, inference_type, model_dir, **args):
-        super(self.__class__, self).__init__()
-        self.engine = FunASREngine.funASREngine(inference_type, model_dir)
+    def __init__(self):
+        # 模型路径
+        model_dir = "iic/SenseVoiceSmall"
+        vad_model = "iic/speech_fsmn_vad_zh-cn-16k-common-pytorch"
 
-    @classmethod
-    def get_config(cls):
-        return config.get("fun_asr", {})
+        # 初始化 ASR 模型
+        self.model = AutoModel(
+            model=model_dir,
+            trust_remote_code=False,
+            vad_model=vad_model,
+            vad_kwargs={"max_single_segment_time": 30000},
+            # device="cuda:0",  # 如需改为 CPU，请写 "cpu"
+            device="cpu",  # 如需改为 CPU，请写 "cpu"
+            disable_update=True
+        )
 
-    def transcribe(self, fp):
-        result = self.engine(fp)
-        if result:
-            logger.info(f"{self.SLUG} 语音识别到了：{result}")
-            return result
-        else:
-            logger.critical(f"{self.SLUG} 语音识别出错了", stack_info=True)
+    def transcribe(self, fp: str) -> str:
+        """
+        识别音频文件（支持本地路径或 URL），返回识别文本
+        """
+        try:
+            result = self.model.generate(
+                input=fp,
+                cache={},
+                language="zn",
+                use_itn=True,
+                batch_size_s=60,
+                merge_vad=True,
+                merge_length_s=15,
+            )
+            text = rich_transcription_postprocess(result[0]["text"])
+            logger.info(f"{self.SLUG} 识别结果: {text}")
+            return text
+        except Exception as e:
+            logger.error(f"{self.SLUG} 识别失败: {e}", stack_info=True)
             return ""
 
 class VolcengineASR(AbstractASR):
