@@ -1,5 +1,5 @@
-# 使用官方 Python 3.8 基础镜像
-FROM python:3.8-slim
+# 使用官方 Python 3.9 基础镜像
+FROM python:3.9-slim
 
 # 设置工作目录
 WORKDIR /app
@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 克隆项目仓库
-RUN git clone https://github.com/wzpan/wukong-robot.git .
+RUN git clone https://github.com/lzxaini/wukong-robot.git .
 
 # 安装 PyAudio
 RUN pip install pyaudio
@@ -33,7 +33,7 @@ RUN pip install --trusted-host pypi.python.org -r requirements.txt
 # 安装 wukong-contrib
 RUN mkdir -p $HOME/.wukong \
     && cd $HOME/.wukong \
-    && git clone http://github.com/wzpan/wukong-contrib.git contrib \
+    && git clone https://github.com/lzxaini/wukong-contrib.git contrib \
     && pip install -r contrib/requirements.txt
 
 # 下载并编译 snowboy
