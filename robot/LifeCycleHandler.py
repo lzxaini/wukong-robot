@@ -11,6 +11,8 @@ from robot import config, constants, statistic, Player
 from robot.ConfigMonitor import ConfigMonitor
 from robot.sdk import LED
 
+import random
+
 logger = logging.getLogger(__name__)
 
 LOCAL_REMINDER = os.path.join(constants.TEMP_PATH, "reminder.pkl")
@@ -156,7 +158,14 @@ class LifeCycleHandler(object):
             self._wakeup.clear()
 
     def _beep_hi(self, onCompleted=None):
-        Player.play(constants.getData("beep_hi.wav"), onCompleted)
+        beep_files = [
+            "beep_hi-1.wav",
+            "beep_hi-2.mp3",
+            "beep_hi-3.mp3",
+            "beep_hi-4.mp3"
+        ]
+        beep_file = random.choice(beep_files)
+        Player.play(constants.getData(beep_file), onCompleted)
 
     def _beep_lo(self):
         Player.play(constants.getData("beep_lo.wav"))
