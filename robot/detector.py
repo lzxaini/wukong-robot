@@ -13,6 +13,8 @@ porcupine = None
 def initDetector(wukong):
     """
     初始化离线唤醒热词监听器，支持 snowboy 和 porcupine 两大引擎
+    2025-6-24 lzx 新增了小云小云，首次运行会自动下载离线包
+    后续加载大概在15s左右
     """
     global porcupine, recorder, detector
     if config.get("detector", "snowboy") == "porcupine":
@@ -89,6 +91,94 @@ def initDetector(wukong):
         finally:
             porcupine and porcupine.delete()
             recorder and recorder.delete()
+
+    elif config.get("detector", "snowboy") == "funAsrXiaoYun":
+        logger.info("使用 funasr 进行离线关键词唤醒")
+        from funasr import AutoModel
+        import sounddevice as sd
+        import numpy as np
+        import queue
+        import threading
+
+        # 初始化模型
+        funasr_model = AutoModel(
+            model="iic/speech_sanm_kws_phone-xiaoyun-commands-offline",
+            keywords="小云小云",
+            output_dir="./outputs/debug",
+            device="cpu",
+            disable_update=True
+        )
+
+        SAMPLE_RATE = 16000
+        CHUNK_DURATION = 1  # 每块 1 秒
+        CHUNK_SIZE = int(SAMPLE_RATE * CHUNK_DURATION)
+        audio_queue = queue.Queue()
+
+        def audio_callback(indata, frames, time_info, status):
+            if status:
+                logger.warning(f"音频输入状态异常: {status}")
+            audio_queue.put(indata.copy())
+
+        # 控制检测线程的事件
+        detecting_event = threading.Event()
+        detecting_event.set()  # 初始允许检测
+        def detection_loop():
+            logger.info("🎙️ 正在监听唤醒词“小云小云”...")
+            while True:
+                detecting_event.wait()  # 如果被清除则暂停检测
+                audio_chunk = audio_queue.get()
+                audio_data = audio_chunk.flatten().astype(np.float32)
+                try:
+                    result = funasr_model.generate(input=audio_data, input_fs=SAMPLE_RATE)
+                    if result and isinstance(result, list):
+                        for item in result:
+                            text = item.get("text", "")
+                            if text.startswith("detected") and "小云小云" in text:
+                                # 提取置信度
+                                try:
+                                    confidence = float(text.strip().split()[-1])
+                                except Exception:
+                                    confidence = 1.0  # 解析失败时默认可信
+                                threshold = config.get("sensitivity", 0.5)
+                                if confidence >= threshold:
+                                    logger.info(f"✅ 检测到唤醒词: {text} (可信度: {confidence} ≥ 阈值: {threshold})")
+                                    # 1. 停止检测
+                                    detecting_event.clear()
+                                    stream.stop()
+                                    # 2. 唤醒流程
+                                    wukong.conversation.interrupt()  # <--- 新增，保证和snowboy一致
+                                    query = wukong.conversation.activeListen()
+                                    wukong.conversation.doResponse(query)
+                                    logger.info("🎙️ 回到唤醒监听中...")
+                                    # 3. 恢复检测
+                                    stream.start()
+                                    detecting_event.set()
+                                else:
+                                    logger.info(f"⚠️ 唤醒词可信度不足: {confidence} < 阈值: {threshold}")
+                            else:
+                                logger.debug(f"未检测到唤醒词: {text}")
+                except Exception as e:
+                    logger.error(f"FunASR 检测失败: {e}")
+
+        stream = sd.InputStream(
+            channels=1,
+            samplerate=SAMPLE_RATE,
+            blocksize=CHUNK_SIZE,
+            dtype='float32',
+            callback=audio_callback
+        )
+        stream.start()
+
+        threading.Thread(target=detection_loop, daemon=True).start()
+
+        # 保持主线程不退出
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("主线程退出，停止唤醒监听。")
+            stream.stop()
+            stream.close()
 
     else:
         logger.info("使用 snowboy 进行离线唤醒")
